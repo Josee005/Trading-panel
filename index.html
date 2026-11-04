@@ -3,19 +3,25 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#f6efd2">
 <meta name="robots" content="noindex,nofollow">
-<title>Bot Trading · Testnet</title>
-<link rel="stylesheet" href="style.css">
+<title>Grok Bot · Spot Testnet</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css?v=tt1">
 </head>
 <body>
+<div id="demoBanner" class="demo hidden"></div>
+
 <main id="login" class="wrap hidden">
-  <div class="brand">◉ BOT TRADING</div>
-  <div class="sub">BTC · ETH · TESTNET</div>
+  <div class="loginhead">
+    <span class="logo"><svg viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="13" fill="#1d2a26"/><rect x="9" y="14" width="30" height="20" rx="10" fill="#fff" transform="rotate(-24 24 24)"/><rect x="15" y="21" width="9" height="9" rx="4.5" fill="#1d2a26" transform="rotate(-24 24 24)"/></svg></span>
+    <div><div class="brandname">Grok Bot</div><div class="mono sub">SPOT · BTC/ETH · TESTNET</div></div>
+  </div>
   <form id="loginForm" class="card">
-    <label>Correo</label>
+    <div class="ctitle">ACCESO PRIVADO</div>
+    <label for="email">Correo</label>
     <input id="email" type="email" autocomplete="username" required>
-    <label>Contraseña</label>
+    <label for="password">Contraseña</label>
     <input id="password" type="password" autocomplete="current-password" required>
     <button class="btn green" type="submit">ENTRAR</button>
     <div id="loginErr" class="err"></div>
@@ -24,27 +30,59 @@
 
 <main id="app" class="wrap hidden">
   <header class="top">
-    <div><span class="brand">◉ BOT TRADING</span><span class="tag">TESTNET</span></div>
-    <button id="logout" class="link">Salir</button>
+    <div class="brandrow">
+      <span class="logo"><svg viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="13" fill="#1d2a26"/><rect x="9" y="14" width="30" height="20" rx="10" fill="#fff" transform="rotate(-24 24 24)"/><rect x="15" y="21" width="9" height="9" rx="4.5" fill="#1d2a26" transform="rotate(-24 24 24)"/></svg></span>
+      <div><div class="brandname">Grok Bot</div><div class="mono sub">SPOT · BTC/ETH · TESTNET</div></div>
+    </div>
+    <div class="clockbox">
+      <div class="clockcol"><div class="clock mono"><i id="clockDot"></i><span id="clock">--:--</span></div><div class="mono tiny">hora Madrid</div></div>
+      <div class="ring" id="ring"><svg viewBox="0 0 44 44"><circle class="rt" cx="22" cy="22" r="18"/><circle class="rf" id="ringArc" cx="22" cy="22" r="18" stroke-dasharray="0 113.1"/></svg><b id="ringTxt">0h</b></div>
+    </div>
   </header>
 
   <section class="hero">
-    <div class="lbl">SALDO (EQUITY)</div>
-    <div id="equity" class="big">–</div>
-    <div class="row2">
-      <div><div class="lbl">P/L TOTAL</div><div id="totalPnl" class="num">–</div></div>
-      <div><div class="lbl">P/L HOY</div><div id="dailyPnl" class="num">–</div></div>
+    <div class="mono lbl">EQUITY</div>
+    <div class="bigrow"><span class="cur">$</span><span id="eqInt" class="bigint">–</span><span id="eqDec" class="bigdec"></span></div>
+    <div class="herorow">
+      <div class="chg"><span id="dayChg" class="chgmain zero">–</span><span class="mono tiny">HOY</span></div>
+      <svg id="spark" class="spark" viewBox="0 0 150 56" preserveAspectRatio="none"></svg>
     </div>
-    <div class="row2 meta">
+    <div class="herorow sub2">
+      <div class="mono small2"><span class="muted">total</span> <b id="totChg" class="zero">–</b></div>
+      <div class="mono small2 right"><b id="mult">–</b> <span class="muted">desde</span> <span id="startBal">–</span></div>
+    </div>
+    <div class="mile">
+      <div class="mono mileTop"><span id="mileLbl">SIGUIENTE META</span></div>
+      <div class="milebar"><span id="mileL" class="mpill on">0%</span><div class="track"><div id="mileFill" class="fill"></div></div><span id="mileR" class="mpill">+1%</span></div>
+    </div>
+    <div class="mile slim">
+      <div class="mono mileTop"><span id="limLbl">LÍMITE DE PÉRDIDA DIARIA</span></div>
+      <div class="track thin"><div id="limFill" class="fill red"></div></div>
+    </div>
+    <div class="metaRow">
       <span id="pill" class="pill">–</span>
       <span id="fresh" class="fresh">–</span>
+      <button id="logout" class="link">Salir</button>
     </div>
     <div id="staleWarn" class="warn hidden">⚠ El bot no envía datos desde hace más de 3 min. Puede estar caído.</div>
     <div id="noOwner" class="warn hidden">Esta cuenta no tiene permiso para ver el bot (no es la propietaria).</div>
   </section>
 
+  <div id="positions"></div>
+
   <section class="card">
-    <div class="ctitle">GRÁFICO · VELAS 1m</div>
+    <div class="rowhead"><div class="mono ctitle">CADA CIERRE</div><div class="wr"><b id="winRate" class="mono">–</b><div class="track thin2"><div id="wrFill" class="fill green"></div></div><span id="wlCount" class="mono tiny">–</span></div></div>
+    <div id="lolli" class="lolli"></div>
+    <div class="avgrow mono"><span>ganancia media <b id="avgWin" class="pos">–</b></span><span class="muted">por cierre</span><span>pérdida media <b id="avgLoss" class="neg">–</b></span></div>
+  </section>
+
+  <section class="card">
+    <div class="rowhead"><div class="mono ctitle">GRANDES CIERRES</div><b id="bigTotal" class="bigtot mono">–</b></div>
+    <div id="bigline" class="bigline"></div>
+  </section>
+
+  <section class="card">
+    <div class="mono ctitle">GRÁFICO · VELAS 1m</div>
     <div class="tabs">
       <button id="tabBTC" class="tab on" data-sym="BTCUSDT">BTCUSDT</button>
       <button id="tabETH" class="tab" data-sym="ETHUSDT">ETHUSDT</button>
@@ -52,15 +90,15 @@
     <div class="liverow"><span id="livePrice" class="liveprice">–</span><span id="liveTag" class="live"><i></i><b>EN VIVO</b></span></div>
     <div id="legend" class="legend">–</div>
     <div id="chart"></div>
-    <div class="keys small2"><span class="k20">━ EMA20</span> <span class="k50">━ EMA50</span> <span class="kb">▲ compra</span> <span class="ks">▼ venta (P/L)</span></div>
+    <div class="keys small2 mono"><span class="k20">━ EMA20</span> <span class="k50">━ EMA50</span> <span class="kb">▲ compra</span> <span class="ks">▼ venta (P/L)</span></div>
     <div id="chartMsg" class="muted small"></div>
   </section>
 
   <section class="card">
-    <div class="ctitle">NIVEL DE RIESGO</div>
+    <div class="mono ctitle">NIVEL DE RIESGO</div>
     <div class="riskhead"><span id="riskVal" class="riskbig">5</span><span class="muted">en uso: <b id="riskUsed">–</b></span></div>
     <input id="risk" type="range" min="1" max="10" step="1" value="5">
-    <div class="ticks"><span>1</span><span>5</span><span>10</span></div>
+    <div class="ticks mono"><span>1</span><span>5</span><span>10</span></div>
     <div id="tier" class="tier"></div>
     <button id="saveRisk" class="btn green">GUARDAR RIESGO</button>
     <div class="muted small">Se aplica solo a operaciones nuevas; las abiertas conservan su SL/TP.</div>
@@ -68,23 +106,18 @@
   </section>
 
   <section class="card">
-    <div class="ctitle">OPERACIONES ABIERTAS</div>
-    <div id="positions"></div>
+    <div class="mono ctitle">HISTORIAL <span id="tradeSum" class="muted small"></span></div>
+    <div id="trades"></div>
   </section>
 
   <section class="card">
-    <div class="ctitle">MESA · 6 AGENTES</div>
+    <div class="mono ctitle">MESA · 6 AGENTES</div>
     <div id="agents"></div>
   </section>
 
   <section class="card">
-    <div class="ctitle">LOGGER <span class="muted small">(hora Madrid)</span></div>
+    <div class="mono ctitle">LOGGER <span class="muted small">(hora Madrid)</span></div>
     <div id="logs" class="logs"></div>
-  </section>
-
-  <section class="card">
-    <div class="ctitle">HISTORIAL <span id="tradeSum" class="muted small"></span></div>
-    <div id="trades"></div>
   </section>
 
   <section class="card danger">
@@ -93,11 +126,12 @@
     <button id="resumeBtn" class="btn outline">▶ REANUDAR</button>
     <div class="muted small">PARAR cierra todas las posiciones a mercado y detiene el bot hasta que pulses REANUDAR.</div>
   </section>
-  <footer class="foot">Binance Spot TESTNET · dinero ficticio · EMA20/EMA50 en velas 1m</footer>
+  <footer class="foot mono">Binance Spot TESTNET · dinero ficticio · sin apalancamiento · EMA20/EMA50 en velas 1m</footer>
 </main>
 
+<script>if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /[?&]mock=/.test(location.search)) document.write('<script src="mock.js"><\/script>');</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=tt1"></script>
 </body>
 </html>
