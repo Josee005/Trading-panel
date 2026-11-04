@@ -5,7 +5,7 @@ const TZ = "Europe/Madrid";
 const STALE_SECONDS = 180;
 const POLL_MS = 10000;
 const AGENTS = [
-  ["scout", "SCOUT", "Precios y velas 5m"],
+  ["scout", "SCOUT", "Precios y velas 1m"],
   ["filtro", "FILTRO", "Límite diario / parado / posición"],
   ["analista", "ANALISTA", "EMA20 / EMA50"],
   ["ejecutor", "EJECUTOR", "Órdenes y tamaño"],
@@ -185,7 +185,7 @@ function renderTrades(rows) {
 /* ---------- gráfico de velas ---------- */
 let chart = null, candleSeries = null, ema20Series = null, ema50Series = null, priceLines = [];
 let chartSym = "BTCUSDT", fitNext = true, tradeAtTime = {}, candleAtTime = {};
-const BAR = 300;                                   // 5 min en segundos
+const BAR = 60;                                    // 1 min en segundos
 const madridTick = new Intl.DateTimeFormat("es-ES", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
 const madridFull = new Intl.DateTimeFormat("es-ES", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
 
@@ -233,7 +233,7 @@ async function renderChart(pairs, positions) {
   ema50Series.setData(cs.filter((c) => c.ema50 != null).map((c) => ({ time: c.time, value: c.ema50 })));
   candleAtTime = {}; for (const c of cs) candleAtTime[c.time] = c;
   candleAtTime.last = cs[cs.length - 1];
-  // marcadores de operaciones (al inicio de la vela de 5m en que ocurrieron)
+  // marcadores de operaciones (al inicio de la vela de 1m en que ocurrieron)
   const first = cs[0].time, last = cs[cs.length - 1].time;
   tradeAtTime = {}; const marks = [];
   for (const t of [...pairs].reverse()) {
