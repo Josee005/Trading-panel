@@ -6,7 +6,7 @@ const STALE_SECONDS = 180;
 const POLL_MS = 10000;
 const AGENTS = [
   ["scout", "SCOUT", "Precios y velas 1m"],
-  ["filtro", "FILTRO", "Límite diario / parado / posición"],
+  ["filtro", "FILTRO", "Tendencia · confirmación · volumen · RSI"],
   ["analista", "ANALISTA", "EMA20 / EMA50"],
   ["ejecutor", "EJECUTOR", "Órdenes y tamaño"],
   ["riesgo", "RIESGO", "SL/TP y pérdida diaria"],
@@ -184,7 +184,7 @@ function renderTrades(rows) {
 
 /* ---------- gráfico de velas ---------- */
 let chart = null, candleSeries = null, ema20Series = null, ema50Series = null, priceLines = [];
-let chartSym = "BTCUSDT", fitNext = true, tradeAtTime = {}, candleAtTime = {};
+let chartSym = "BTCUSDT", fitNext = true, tradeAtTime = {}, candleAtTime = {}, hovering = false, renderSeq = 0;
 const BAR = 60;                                    // 1 min en segundos
 const madridTick = new Intl.DateTimeFormat("es-ES", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
 const madridFull = new Intl.DateTimeFormat("es-ES", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
@@ -205,7 +205,7 @@ function ensureChart() {
   candleSeries = chart.addCandlestickSeries({ upColor: "#2bff7a", downColor: "#ff3b57", borderUpColor: "#2bff7a", borderDownColor: "#ff3b57", wickUpColor: "#2bff7a", wickDownColor: "#ff3b57" });
   ema20Series = chart.addLineSeries({ color: "#00e5ff", lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
   ema50Series = chart.addLineSeries({ color: "#ff9f1c", lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-  chart.subscribeCrosshairMove((p) => showLegend(p.time));
+  chart.subscribeCrosshairMove((p) => { hovering = !!p.time; showLegend(p.time); });
   return true;
 }
 function showLegend(t) {
@@ -221,8 +221,10 @@ function showLegend(t) {
 }
 async function renderChart(pairs, positions) {
   if (!ensureChart()) return;
+  const sym = chartSym, seq = ++renderSeq;
   const { data, error } = await sb.from("candles").select("open_time,open,high,low,close,ema20,ema50")
-    .eq("symbol", chartSym).order("open_time", { ascending: true }).limit(400);
+    .eq("symbol", sym).order("open_time", { ascending: true }).limit(400);
+  if (seq !== renderSeq || sym !== chartSym) return;   // llegó tarde: el usuario cambió de pestaña o hay otra carga más nueva
   if (error) { $("chartMsg").textContent = "Error cargando velas: " + error.message; return; }
   if (!data.length) { $("chartMsg").textContent = "Aún no hay velas sincronizadas."; return; }
   $("chartMsg").textContent = "";
@@ -262,13 +264,117 @@ async function renderChart(pairs, positions) {
     if (p.tp_price != null) add(p.tp_price, "#2bff7a", "TP");
   }
   if (fitNext) { chart.timeScale().fitContent(); fitNext = false; }
-  showLegend(undefined);
+  liveAfterRender(cs);
+  if (!hovering) showLegend(undefined);
 }
 document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => {
   chartSym = b.dataset.sym; fitNext = true;
+  liveStop(); $("livePrice").textContent = "–";       // el WebSocket se reabre para el nuevo símbolo tras cargar sus velas
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x === b));
   refresh();
 }));
+
+/* ---------- tiempo real: WebSocket de Binance Spot TESTNET (kline_1m + trade) ----------
+   Si el WS no conecta, no pasa nada: el gráfico sigue con el sondeo a Supabase cada POLL_MS. */
+const WS_HOST = "wss://stream.testnet.binance.vision";
+const K20 = 2 / 21, K50 = 2 / 51;
+let ws = null, wsSym = null, wsTry = 0, wsTimer = null, wsWatch = null, wsLastMsg = 0, liveOn = false;
+let live = null;               // { t, open, high, low, close, e20, e50 } vela en formación
+let emaBase = null;            // { t, e20, e50 } EMA de la última vela CERRADA anterior a la que se forma
+let lastTrade = { T: 0, p: 0 };
+let lastPx = null;
+
+function setLiveUI(on) {
+  liveOn = on;
+  const t = $("liveTag"); t.classList.toggle("on", on);
+  t.querySelector("b").textContent = on ? "EN VIVO" : "CADA " + (POLL_MS / 1000) + " s";
+}
+function liveStop() {
+  wsSym = null; live = null; emaBase = null; lastTrade = { T: 0, p: 0 }; lastPx = null;
+  clearTimeout(wsTimer); clearInterval(wsWatch); wsTimer = wsWatch = null;
+  if (ws) { const w = ws; ws = null; w.onopen = w.onmessage = w.onerror = w.onclose = null; try { w.close(); } catch (e) {} }
+  setLiveUI(false);
+}
+function liveConnect(sym) {
+  if (document.hidden) return;                     // pestaña oculta: no gasto batería ni datos
+  wsSym = sym;
+  const s = sym.toLowerCase();
+  let w;
+  try { w = new WebSocket(`${WS_HOST}/stream?streams=${s}@kline_1m/${s}@trade`); } catch (e) { return liveRetry(sym); }
+  ws = w;
+  w.onopen = () => { wsTry = 0; wsLastMsg = Date.now(); };
+  w.onmessage = (ev) => {
+    wsLastMsg = Date.now();
+    if (ws !== w || sym !== chartSym) return;
+    let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+    if (!liveOn) setLiveUI(true);
+    const d = m.data; if (!d) return;
+    if (d.e === "kline") onKline(d); else if (d.e === "trade") onTrade(d);
+  };
+  w.onerror = () => {};
+  w.onclose = () => { if (ws === w) { ws = null; setLiveUI(false); liveRetry(sym); } };
+  clearInterval(wsWatch);
+  wsWatch = setInterval(() => {                    // sin mensajes en 15 s => conexión muerta, reintento
+    if (ws === w && Date.now() - wsLastMsg > 15000) { ws = null; w.onclose = null; try { w.close(); } catch (e) {} setLiveUI(false); liveRetry(sym); }
+  }, 5000);
+}
+function liveRetry(sym) {
+  clearTimeout(wsTimer);
+  const wait = Math.min(30000, 1000 * 2 ** Math.min(wsTry++, 5));     // 1,2,4,8,16,30 s
+  wsTimer = setTimeout(() => { wsTimer = null; if (sym === chartSym && !ws) liveConnect(sym); }, wait);
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) liveStop();                 // pestaña oculta: cierro el WS
+  else { wsTry = 0; refresh(); }                   // al volver, recargo velas y renderChart reabre el WS
+});
+
+// llamado tras cada carga de velas desde Supabase (solo velas cerradas)
+function liveAfterRender(cs) {
+  const lastCs = cs[cs.length - 1];
+  if (!live || lastCs.time < live.t) {             // semilla de EMA: última vela cerrada de Supabase
+    if (lastCs.ema20 != null && (!live || !emaBase || lastCs.time >= emaBase.t)) emaBase = { t: lastCs.time, e20: lastCs.ema20, e50: lastCs.ema50 };
+  }
+  if (live && live.t >= lastCs.time) paintLive();  // la carga borra la vela en formación: la vuelvo a pintar
+  if (!ws && !wsTimer && !document.hidden) liveConnect(chartSym);
+}
+function onTrade(d) {
+  if (!live) return;
+  const p = +d.p, T = d.T;
+  lastTrade = { T, p };
+  if (T < live.t * 1000 || T >= (live.t + BAR) * 1000) return;   // trade de otra vela: espero al mensaje kline
+  live.close = p; live.high = Math.max(live.high, p); live.low = Math.min(live.low, p);
+  computeLiveEma(); paintLive();
+}
+function onKline(d) {
+  const k = d.k, t = Math.floor(k.t / 1000);
+  if (live && t < live.t) return;
+  if (!live || t > live.t) {                       // nueva vela: la anterior queda cerrada y su EMA pasa a ser la base
+    if (live && t - live.t === BAR) emaBase = { t: live.t, e20: live.e20, e50: live.e50 };
+    live = { t, open: +k.o, high: +k.h, low: +k.l, close: +k.c, e20: null, e50: null };
+  } else { live.open = +k.o; live.high = +k.h; live.low = +k.l; live.close = +k.c; }
+  if (lastTrade.T > d.E && lastTrade.T >= t * 1000 && lastTrade.T < (t + BAR) * 1000) {   // un trade más reciente que este kline manda
+    live.close = lastTrade.p; live.high = Math.max(live.high, lastTrade.p); live.low = Math.min(live.low, lastTrade.p);
+  }
+  computeLiveEma(); paintLive();
+}
+function computeLiveEma() {
+  if (!live || !emaBase) return;
+  live.e20 = live.close * K20 + emaBase.e20 * (1 - K20);
+  live.e50 = live.close * K50 + emaBase.e50 * (1 - K50);
+}
+function paintLive() {
+  if (!live || !candleSeries) return;
+  try {
+    candleSeries.update({ time: live.t, open: live.open, high: live.high, low: live.low, close: live.close });
+    if (live.e20 != null) { ema20Series.update({ time: live.t, value: live.e20 }); ema50Series.update({ time: live.t, value: live.e50 }); }
+  } catch (e) { return; }                          // vela más antigua que la última del gráfico: lo corrige la próxima carga
+  candleAtTime[live.t] = candleAtTime.last = { time: live.t, open: live.open, high: live.high, low: live.low, close: live.close, ema20: live.e20, ema50: live.e50 };
+  const pe = $("livePrice");
+  pe.textContent = fmtUsd(live.close) + " $";
+  if (lastPx != null && live.close !== lastPx) { pe.classList.remove("up", "dn"); pe.classList.add(live.close > lastPx ? "up" : "dn"); }
+  lastPx = live.close;
+  if (!hovering) showLegend(undefined);
+}
 
 /* ---------- controls ---------- */
 let sliderTouched = false;

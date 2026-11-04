@@ -64,3 +64,13 @@ input[type=range]{width:100%;accent-color:var(--g);height:36px}
 .keys{margin-top:8px}.keys span{margin-right:10px}
 .k20{color:#00e5ff}.k50{color:#ff9f1c}.kb{color:var(--g)}.ks{color:var(--r)}
 .item .why{font-size:11px;color:var(--m)}
+
+/* tiempo real */
+.liverow{display:flex;align-items:center;justify-content:space-between;margin:2px 0 6px}
+.liveprice{font:700 22px ui-monospace,Menlo,Consolas,monospace;color:var(--t);transition:color .25s}
+.liveprice.up{color:var(--g)}.liveprice.dn{color:var(--r)}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.1em;color:var(--m);border:1px solid var(--line);border-radius:99px;padding:3px 10px}
+.live i{width:8px;height:8px;border-radius:50%;background:#4a5a4a;display:inline-block}
+.live.on{color:var(--g);border-color:var(--g)}
+.live.on i{background:var(--g);box-shadow:0 0 8px var(--g);animation:lv 1.4s infinite}
+@keyframes lv{50%{opacity:.35}}
