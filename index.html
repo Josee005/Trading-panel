@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="robots" content="noindex,nofollow">
+<title>Bot Trading · Testnet</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="login" class="wrap hidden">
+  <div class="brand">◉ BOT TRADING</div>
+  <div class="sub">BTC · ETH · TESTNET</div>
+  <form id="loginForm" class="card">
+    <label>Correo</label>
+    <input id="email" type="email" autocomplete="username" required>
+    <label>Contraseña</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <button class="btn green" type="submit">ENTRAR</button>
+    <div id="loginErr" class="err"></div>
+  </form>
+</main>
+
+<main id="app" class="wrap hidden">
+  <header class="top">
+    <div><span class="brand">◉ BOT TRADING</span><span class="tag">TESTNET</span></div>
+    <button id="logout" class="link">Salir</button>
+  </header>
+
+  <section class="hero">
+    <div class="lbl">SALDO (EQUITY)</div>
+    <div id="equity" class="big">–</div>
+    <div class="row2">
+      <div><div class="lbl">P/L TOTAL</div><div id="totalPnl" class="num">–</div></div>
+      <div><div class="lbl">P/L HOY</div><div id="dailyPnl" class="num">–</div></div>
+    </div>
+    <div class="row2 meta">
+      <span id="pill" class="pill">–</span>
+      <span id="fresh" class="fresh">–</span>
+    </div>
+    <div id="staleWarn" class="warn hidden">⚠ El bot no envía datos desde hace más de 3 min. Puede estar caído.</div>
+    <div id="noOwner" class="warn hidden">Esta cuenta no tiene permiso para ver el bot (no es la propietaria).</div>
+  </section>
+
+  <section class="card">
+    <div class="ctitle">NIVEL DE RIESGO</div>
+    <div class="riskhead"><span id="riskVal" class="riskbig">5</span><span class="muted">en uso: <b id="riskUsed">–</b></span></div>
+    <input id="risk" type="range" min="1" max="10" step="1" value="5">
+    <div class="ticks"><span>1</span><span>5</span><span>10</span></div>
+    <div id="tier" class="tier"></div>
+    <button id="saveRisk" class="btn green">GUARDAR RIESGO</button>
+    <div class="muted small">Se aplica solo a operaciones nuevas; las abiertas conservan su SL/TP.</div>
+    <div id="riskMsg" class="msg"></div>
+  </section>
+
+  <section class="card">
+    <div class="ctitle">OPERACIONES ABIERTAS</div>
+    <div id="positions"></div>
+  </section>
+
+  <section class="card">
+    <div class="ctitle">MESA · 6 AGENTES</div>
+    <div id="agents"></div>
+  </section>
+
+  <section class="card">
+    <div class="ctitle">LOGGER <span class="muted small">(hora Madrid)</span></div>
+    <div id="logs" class="logs"></div>
+  </section>
+
+  <section class="card">
+    <div class="ctitle">HISTORIAL</div>
+    <div id="trades"></div>
+  </section>
+
+  <section class="card danger">
+    <div id="ctlState" class="msg"></div>
+    <button id="stopBtn" class="btn red">⛔ PARAR BOT</button>
+    <button id="resumeBtn" class="btn outline">▶ REANUDAR</button>
+    <div class="muted small">PARAR cierra todas las posiciones a mercado y detiene el bot hasta que pulses REANUDAR.</div>
+  </section>
+  <footer class="foot">Binance Spot TESTNET · dinero ficticio · EMA20/EMA50 en velas 4h</footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+</body>
+</html>
