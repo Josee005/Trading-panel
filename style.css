@@ -54,3 +54,13 @@ input[type=range]{width:100%;accent-color:var(--g);height:36px}
 .logs .t{color:var(--m)}.logs .a{color:var(--g)}.logs .warn2{color:var(--y)}.logs .error2{color:var(--r)}
 .empty{color:var(--m);font-size:13px}
 .foot{text-align:center;color:#3c4a3c;font-size:11px;margin-top:22px}
+
+.tabs{display:flex;gap:8px;margin-bottom:10px}
+.tab{flex:1;background:#000;border:1px solid var(--line);color:var(--m);border-radius:10px;padding:10px;font-weight:700;letter-spacing:.06em;font-size:13px}
+.tab.on{border-color:var(--g);color:var(--g);background:rgba(43,255,122,.08)}
+#chart{width:100%;height:340px;border-radius:10px;overflow:hidden;position:relative}
+.legend{font:11.5px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--t);min-height:34px;margin-bottom:6px;word-break:break-word}
+.legend .tr{color:var(--y)}
+.keys{margin-top:8px}.keys span{margin-right:10px}
+.k20{color:#00e5ff}.k50{color:#ff9f1c}.kb{color:var(--g)}.ks{color:var(--r)}
+.item .why{font-size:11px;color:var(--m)}

@@ -44,6 +44,18 @@
   </section>
 
   <section class="card">
+    <div class="ctitle">GRÁFICO · VELAS 5m</div>
+    <div class="tabs">
+      <button id="tabBTC" class="tab on" data-sym="BTCUSDT">BTCUSDT</button>
+      <button id="tabETH" class="tab" data-sym="ETHUSDT">ETHUSDT</button>
+    </div>
+    <div id="legend" class="legend">–</div>
+    <div id="chart"></div>
+    <div class="keys small2"><span class="k20">━ EMA20</span> <span class="k50">━ EMA50</span> <span class="kb">▲ compra</span> <span class="ks">▼ venta (P/L)</span></div>
+    <div id="chartMsg" class="muted small"></div>
+  </section>
+
+  <section class="card">
     <div class="ctitle">NIVEL DE RIESGO</div>
     <div class="riskhead"><span id="riskVal" class="riskbig">5</span><span class="muted">en uso: <b id="riskUsed">–</b></span></div>
     <input id="risk" type="range" min="1" max="10" step="1" value="5">
@@ -70,7 +82,7 @@
   </section>
 
   <section class="card">
-    <div class="ctitle">HISTORIAL</div>
+    <div class="ctitle">HISTORIAL <span id="tradeSum" class="muted small"></span></div>
     <div id="trades"></div>
   </section>
 
@@ -80,10 +92,11 @@
     <button id="resumeBtn" class="btn outline">▶ REANUDAR</button>
     <div class="muted small">PARAR cierra todas las posiciones a mercado y detiene el bot hasta que pulses REANUDAR.</div>
   </section>
-  <footer class="foot">Binance Spot TESTNET · dinero ficticio · EMA20/EMA50 en velas 4h</footer>
+  <footer class="foot">Binance Spot TESTNET · dinero ficticio · EMA20/EMA50 en velas 5m</footer>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -5,7 +5,7 @@ const TZ = "Europe/Madrid";
 const STALE_SECONDS = 180;
 const POLL_MS = 10000;
 const AGENTS = [
-  ["scout", "SCOUT", "Precios y velas 4h"],
+  ["scout", "SCOUT", "Precios y velas 5m"],
   ["filtro", "FILTRO", "Límite diario / parado / posición"],
   ["analista", "ANALISTA", "EMA20 / EMA50"],
   ["ejecutor", "EJECUTOR", "Órdenes y tamaño"],
@@ -68,7 +68,7 @@ async function refresh() {
     const [snap, pos, trades, logs, ctl] = await Promise.all([
       sb.from("bot_snapshot").select("*").eq("id", 1).maybeSingle(),
       sb.from("positions").select("*").order("opened_at", { ascending: false }),
-      sb.from("trades").select("*").order("ts", { ascending: false }).limit(50),
+      sb.from("trades").select("*").order("ts", { ascending: false }).limit(200),
       sb.from("bot_log").select("*").order("id", { ascending: false }).limit(60),
       sb.from("controls").select("*").eq("id", 1).maybeSingle(),
     ]);
@@ -80,8 +80,10 @@ async function refresh() {
     renderPositions(pos.data || []);
     renderAgents(snap.data);
     renderLogs(logs.data || []);
-    renderTrades(trades.data || []);
+    const pairs = pairTrades(trades.data || []);
+    renderTrades(pairs);
     renderControls();
+    await renderChart(pairs, pos.data || []);
   } catch (e) { console.error(e); }
 }
 
@@ -145,17 +147,128 @@ function renderLogs(rows) {
   }
 }
 
+const REASONS = { SIGNAL: "cruce EMA", SL: "stop-loss", TP: "take-profit", STOP_BUTTON: "botón PARAR", DAILY_LIMIT: "límite diario" };
+/* Empareja COMPRA→VENTA por símbolo (solo long, una posición por símbolo): añade entrada, salida, P/L y % a cada venta. */
+function pairTrades(rows) {
+  const asc = [...rows].sort((x, y) => new Date(x.ts) - new Date(y.ts) || x.id - y.id);
+  const open = {};
+  for (const t of asc) {
+    if (t.side === "BUY") open[t.symbol] = t;
+    else if (t.side === "SELL") {
+      const b = open[t.symbol];
+      t.entry = b ? Number(b.price) : null;
+      t.exitPrice = Number(t.price);
+      const cost = b ? Number(b.price) * Number(t.qty) : null;
+      t.pct = t.pnl != null && cost ? (Number(t.pnl) / cost) * 100 : null;
+      delete open[t.symbol];
+    }
+  }
+  return asc.reverse();            // más recientes primero
+}
 function renderTrades(rows) {
   const box = $("trades"); box.replaceChildren();
+  const sells = rows.filter((t) => t.side === "SELL" && t.pnl != null);
+  const tot = sells.reduce((s, t) => s + Number(t.pnl), 0), w = sells.filter((t) => t.pnl > 0).length;
+  $("tradeSum").textContent = sells.length ? `· ${sells.length} cierres · ${w} ganadas / ${sells.length - w} perdidas · ${fmtSigned(tot)} $` : "";
   if (!rows.length) { box.append(el("div", "empty", "Aún no hay operaciones.")); return; }
-  for (const t of rows) {
+  for (const t of rows.slice(0, 60)) {
     const it = el("div", "item"), r1 = el("div", "irow");
     r1.append(el("span", "sym", (t.side === "BUY" ? "COMPRA " : "VENTA ") + t.symbol),
-              el("span", "sym " + (t.pnl == null ? "zero" : cls(t.pnl)), t.pnl == null ? "–" : fmtSigned(t.pnl) + " $"));
-    it.append(r1, el("div", "small2", `${dateFmt.format(new Date(t.ts))} · ${Number(t.qty)} @ ${fmtUsd(t.price)}${t.reason ? " · " + t.reason : ""}`));
+              el("span", "sym " + (t.pnl == null ? "zero" : cls(t.pnl)),
+                 t.pnl == null ? "–" : fmtSigned(t.pnl) + " $" + (t.pct != null ? " (" + (t.pct >= 0 ? "+" : "−") + Math.abs(t.pct).toFixed(2) + "%)" : "")));
+    it.append(r1, el("div", "small2", `${dateFmt.format(new Date(t.ts))} · ${Number(t.qty)} @ ${fmtUsd(t.price)}${t.reason ? " · " + (REASONS[t.reason] || t.reason) : ""}`));
+    if (t.side === "SELL" && t.entry != null) it.append(el("div", "why", `entrada ${fmtUsd(t.entry)} → salida ${fmtUsd(t.exitPrice)}`));
     box.append(it);
   }
 }
+
+/* ---------- gráfico de velas ---------- */
+let chart = null, candleSeries = null, ema20Series = null, ema50Series = null, priceLines = [];
+let chartSym = "BTCUSDT", fitNext = true, tradeAtTime = {}, candleAtTime = {};
+const BAR = 300;                                   // 5 min en segundos
+const madridTick = new Intl.DateTimeFormat("es-ES", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
+const madridFull = new Intl.DateTimeFormat("es-ES", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+
+function ensureChart() {
+  if (chart) return true;
+  if (typeof LightweightCharts === "undefined") { $("chartMsg").textContent = "No se pudo cargar la librería del gráfico (CDN)."; return false; }
+  chart = LightweightCharts.createChart($("chart"), {
+    autoSize: true,
+    layout: { background: { color: "#000000" }, textColor: "#9fb09f", fontSize: 11 },
+    grid: { vertLines: { color: "#101810" }, horzLines: { color: "#101810" } },
+    rightPriceScale: { borderColor: "#1b261b" },
+    timeScale: { borderColor: "#1b261b", timeVisible: true, secondsVisible: false, rightOffset: 4,
+                 tickMarkFormatter: (t) => madridTick.format(new Date(t * 1000)) },
+    localization: { timeFormatter: (t) => madridFull.format(new Date(t * 1000)) },
+    crosshair: { mode: 0 },
+  });
+  candleSeries = chart.addCandlestickSeries({ upColor: "#2bff7a", downColor: "#ff3b57", borderUpColor: "#2bff7a", borderDownColor: "#ff3b57", wickUpColor: "#2bff7a", wickDownColor: "#ff3b57" });
+  ema20Series = chart.addLineSeries({ color: "#00e5ff", lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+  ema50Series = chart.addLineSeries({ color: "#ff9f1c", lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+  chart.subscribeCrosshairMove((p) => showLegend(p.time));
+  return true;
+}
+function showLegend(t) {
+  const lg = $("legend"); lg.replaceChildren();
+  const c = candleAtTime[t] || candleAtTime.last;
+  if (!c) { lg.textContent = "–"; return; }
+  const d = new Date(c.time * 1000);
+  lg.append(document.createTextNode(`${madridFull.format(d)} · A ${fmtUsd(c.open)} M ${fmtUsd(c.high)} m ${fmtUsd(c.low)} C ${fmtUsd(c.close)} · EMA20 ${fmtUsd(c.ema20)} EMA50 ${fmtUsd(c.ema50)}`));
+  for (const x of tradeAtTime[c.time] || []) {
+    const s = x.side === "BUY" ? `COMPRA @ ${fmtUsd(x.price)}` : `VENTA @ ${fmtUsd(x.price)}${x.entry != null ? " (entrada " + fmtUsd(x.entry) + ")" : ""} P/L ${x.pnl == null ? "–" : fmtSigned(x.pnl) + " $" + (x.pct != null ? " " + x.pct.toFixed(2) + "%" : "")}`;
+    lg.append(el("div", "tr", s));
+  }
+}
+async function renderChart(pairs, positions) {
+  if (!ensureChart()) return;
+  const { data, error } = await sb.from("candles").select("open_time,open,high,low,close,ema20,ema50")
+    .eq("symbol", chartSym).order("open_time", { ascending: true }).limit(400);
+  if (error) { $("chartMsg").textContent = "Error cargando velas: " + error.message; return; }
+  if (!data.length) { $("chartMsg").textContent = "Aún no hay velas sincronizadas."; return; }
+  $("chartMsg").textContent = "";
+  const cs = data.map((r) => ({ time: Math.floor(new Date(r.open_time).getTime() / 1000), open: +r.open, high: +r.high, low: +r.low, close: +r.close,
+                                ema20: r.ema20 == null ? null : +r.ema20, ema50: r.ema50 == null ? null : +r.ema50 }));
+  candleSeries.setData(cs.map(({ time, open, high, low, close }) => ({ time, open, high, low, close })));
+  ema20Series.setData(cs.filter((c) => c.ema20 != null).map((c) => ({ time: c.time, value: c.ema20 })));
+  ema50Series.setData(cs.filter((c) => c.ema50 != null).map((c) => ({ time: c.time, value: c.ema50 })));
+  candleAtTime = {}; for (const c of cs) candleAtTime[c.time] = c;
+  candleAtTime.last = cs[cs.length - 1];
+  // marcadores de operaciones (al inicio de la vela de 5m en que ocurrieron)
+  const first = cs[0].time, last = cs[cs.length - 1].time;
+  tradeAtTime = {}; const marks = [];
+  for (const t of [...pairs].reverse()) {
+    if (t.symbol !== chartSym) continue;
+    let bt = Math.floor(new Date(t.ts).getTime() / 1000 / BAR) * BAR;
+    if (bt < first) continue;
+    if (bt > last) bt = last;                      // operación en la vela en formación: la pinto en la última cerrada
+    (tradeAtTime[bt] = tradeAtTime[bt] || []).push(t);
+    if (t.side === "BUY") marks.push({ time: bt, position: "belowBar", shape: "arrowUp", color: "#2bff7a", text: "COMPRA" });
+    else {
+      const pnl = t.pnl == null ? "" : (t.pnl >= 0 ? "+" : "−") + Math.abs(t.pnl).toFixed(2) + "$";
+      const pct = t.pct == null ? "" : " " + (t.pct >= 0 ? "+" : "−") + Math.abs(t.pct).toFixed(2) + "%";
+      const why = t.reason ? " " + ({ SIGNAL: "cruce", SL: "SL", TP: "TP", STOP_BUTTON: "parada", DAILY_LIMIT: "límite" }[t.reason] || t.reason) : "";
+      marks.push({ time: bt, position: "aboveBar", shape: "arrowDown", color: "#ff3b57", text: (pnl + pct + why).trim() || "VENTA" });
+    }
+  }
+  marks.sort((a, b) => a.time - b.time);
+  candleSeries.setMarkers(marks);
+  // líneas de la posición abierta: entrada, SL, TP
+  for (const l of priceLines) candleSeries.removePriceLine(l);
+  priceLines = [];
+  for (const p of positions.filter((x) => x.symbol === chartSym)) {
+    const add = (price, color, title) => priceLines.push(candleSeries.createPriceLine({ price: +price, color, lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title }));
+    add(p.entry_price, "#e8f5e8", "ENTRADA");
+    if (p.sl_price != null) add(p.sl_price, "#ff3b57", "SL");
+    if (p.tp_price != null) add(p.tp_price, "#2bff7a", "TP");
+  }
+  if (fitNext) { chart.timeScale().fitContent(); fitNext = false; }
+  showLegend(undefined);
+}
+document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => {
+  chartSym = b.dataset.sym; fitNext = true;
+  document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x === b));
+  refresh();
+}));
 
 /* ---------- controls ---------- */
 let sliderTouched = false;
